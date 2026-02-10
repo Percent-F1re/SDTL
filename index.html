@@ -1,1 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基于自注意力机制与深度迁移学习的锂电池SOH小样本在线估计方法——SDTL</title>
+    <style>
+        /* 全局设置：纯白背景 */
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, "Microsoft Yahei", sans-serif;
+            background-color: #ffffff;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            line-height: 1.8;
+            display: flex;
+        }
 
+        /* 左侧导航栏 */
+        nav {
+            width: 250px;
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            background-color: #fcfcfc; /* 极淡的灰色区分导航，保持整体白色感 */
+            border-right: 1px solid #eee;
+            padding: 40px 20px;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+
+        nav ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        nav li {
+            margin-bottom: 15px;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: #555;
+            font-size: 14px;
+            font-weight: 500;
+            display: block;
+            transition: color 0.3s;
+        }
+
+        nav a:hover {
+            color: #000;
+            font-weight: bold;
+        }
+
+        /* 右侧主要内容区域 */
+        main {
+            margin-left: 250px; /* 留出导航栏宽度 */
+            padding: 60px 80px;
+            max-width: 900px; /* 限制阅读宽度 */
+            width: 100%;
+            background-color: #ffffff;
+        }
+
+        /* 标题样式：加大加粗 */
+        h1.main-title {
+            font-size: 2.5rem;
+            font-weight: 900;
+            margin-bottom: 10px;
+            line-height: 1.3;
+            color: #000;
+        }
+
+        .original-link {
+            font-size: 0.9rem;
+            color: #0066cc;
+            margin-bottom: 40px;
+            display: inline-block;
+            text-decoration: none;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-top: 50px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+            color: #111;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            color: #222;
+        }
+
+        p {
+            margin-bottom: 20px;
+            text-align: justify;
+        }
+
+        /* 图片占位符样式 */
+        .img-placeholder {
+            width: 100%;
+            min-height: 300px;
+            background-color: #f9f9f9;
+            border: 2px dashed #ddd;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 30px 0;
+            color: #888;
+            padding: 20px;
+            text-align: center;
+            border-radius: 4px;
+        }
+
+        .img-caption {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #666;
+            font-style: italic;
+            text-align: center;
+        }
+
+        /* 表格样式 */
+        .table-placeholder {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        .table-placeholder th, .table-placeholder td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .table-placeholder th {
+            background-color: #f4f4f4;
+        }
+
+        /* 语言切换按钮 */
+        .lang-switch {
+            position: fixed;
+            top: 20px;
+            right: 40px;
+            z-index: 1000;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .lang-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #888;
+            transition: all 0.2s;
+        }
+
+        .lang-btn.active {
+            background-color: #333;
+            color: #fff;
+            border-radius: 2px;
+        }
+
+        .lang-btn:hover:not(.active) {
+            color: #333;
+            background-color: #f0f0f0;
+        }
+
+        /* 语言内容显示控制 */
+        .content-section {
+            display: none;
+        }
+        .content-section.active {
+            display: block;
+        }
+
+        /* 引用样式 */
+        blockquote {
+            border-left: 4px solid #333;
+            margin: 0;
+            padding-left: 20px;
+            color: #555;
+            background-color: #fdfdfd;
+            padding: 10px 20px;
+        }
+
+        /* 强调文本 */
+        strong {
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="lang-switch">
+        <button class="lang-btn active" onclick="switchLang('cn')">中</button>
+        <button class="lang-btn" onclick="switchLang('en')">EN</button>
+        <button class="lang-btn" onclick="switchLang('fr')">FR</button>
+        <button class="lang-btn" onclick="switchLang('de')">DE</button>
+    </div>
+
+    <nav>
+        <ul id="nav-list">
+            </ul>
+    </nav>
+
+    <main>
+        <div id="content-cn" class="content-section active">
+            <h1 class="main-title">基于自注意力机制与深度迁移学习的锂电池SOH小样本在线估计方法——SDTL</h1>
+            <a href="https://www.sciencedirect.com/science/article/pii/S0378775325013394" target="_blank" class="original-link">原文链接(ScienceDirect)</a>
+
+            <section id="cn-intro">
+                <h2>前言</h2>
+                <p>在新能源汽车和储能系统飞速发展的今天，锂离子电池作为核心储能元件，其健康状态（SOH）的精准监测直接关系到系统的安全运行与剩余寿命预测。现实工业场景中，运行工况千变万化，电池材料在不断迭代。对于新投入使用的电池，我们往往面临着一个严重问题——缺乏足够的历史老化数据来训练高精度的模型。</p>
+                <p>如何利用有限的早期数据，在不同材料、不同温度和不同充放电倍率下，实现对新电池SOH的快速、精准在线估计呢？</p>
+                <p>2025年发表在《Journal of Power Sources》上的论文Deep transfer learning enabled online state-of-health estimation of lithium-ion batteries under small samples across different cathode materials, ambient temperature and charge-discharge protocols提出了一种 <strong>基于自注意力机制的深度迁移学习（Self-attention-based Deep Transfer Learning, SDTL）</strong> 方法。该方法结合了Transformer架构的核心组件与迁移学习中的微调（Fine-tuning）策略，降低了高精度SOH估计对大规模历史数据的依赖。</p>
+                
+                <div class="img-placeholder">
+                    [在此处插入 图1 图片]
+                    <div class="img-caption">图1 基于深度迁移学习的电池健康状态（SOH）在线估计框架</div>
+                </div>
+            </section>
+
+            <section id="cn-sec1">
+                <h2>一、SOH估计的痛点</h2>
+                <p>在电池管理系统（BMS）的研究中，SOH估计有以下要求：</p>
+                <ul>
+                    <li><strong>高精度</strong>：要求模型能捕捉电池内部复杂的电化学非线性老化特征。</li>
+                    <li><strong>广义性</strong>：要求模型能适应不同的正极材料和多变的工况。</li>
+                    <li><strong>低数据依赖</strong>：要求模型在新电池仅有少量循环数据时即可工作。</li>
+                </ul>
+                <p>如何同时满足这三个要求是目前SOH估计所面临的困境。传统的数据驱动方法的训练（如CNN、LSTM）需要大量的全生命周期数据。一旦电池型号改变或者运行环境变化，原有模型将不再适用。针对此问题，作者提出了SDTL框架，其核心思想是：<strong>不从零开始学习，而是利用已有的历史数据去快速适应新任务。</strong></p>
+            </section>
+
+            <section id="cn-sec2">
+                <h2>二、 SDTL框架的构造</h2>
+                <p>作者针对电池时序数据的特性，设计了一个包含 <strong>多源特征工程</strong> 、 <strong>自注意力特征提取</strong> 以及 <strong>参数微调迁移</strong> 的完整SDTL框架。</p>
+                
+                <h3>1. 多源特征工程</h3>
+                <p>作者从统计学、电化学和时间维度提取了18个特征，即表征电池老化程度的健康因子（HIs）。</p>
+                <ul>
+                    <li><strong>增量容量分析（ICA)</strong>：提取IC曲线的峰值，这是连接物理模型与数据驱动模型的桥梁，与电池内部活性锂损失密切相关。</li>
+                    <li><strong>充放电几何特征</strong>：包括恒流充电时间、恒压充电容量等。随着老化，极化阻抗增加，恒流充电阶段通常会缩短。</li>
+                    <li><strong>高阶统计特征与熵</strong>：该论文的一大亮点是引入了 <strong>样本熵（Sample Entropy）</strong>。在电池老化初期，电压曲线的均值和方差变化不明显，但随着SOH下降，电压、电流序列的信息熵会发生显著改变。熵值能够捕捉到这些微小的非线性信号波动。</li>
+                </ul>
+
+                <div class="img-placeholder">
+                    [在此处插入 表1 图片]
+                    <div class="img-caption">表1 多源健康指标</div>
+                </div>
+
+                <p>作者使用了 <strong>皮尔逊相关系数（PCC）</strong> 进行特征筛选。结果表明，HI5（恒流放电时间）、HI17（电流熵）和 HI18（电流斜率）等指标在大多数工况下与SOH的相关性较高。该算法采用滑动窗口技术，将这些筛选后的高相关性因子作为模型输入。</p>
+
+                <div class="img-placeholder">
+                    [在此处插入 图2 图片]
+                    <div class="img-caption">图2 提取的健康指标（HIs）与电池健康状态（SOH）的皮尔逊相关系数图</div>
+                </div>
+
+                <h3>2. 多头自注意力机制</h3>
+                <p>该论文引入了Transformer的核心组件—— <strong>多头自注意力机制（Multi-Head Self-Attention）</strong>，以此来提高特征提取效率。</p>
+                <p><strong>（1）自注意力机制</strong><br>
+                自注意力机制不依赖于时间步的顺序，它通过计算序列中每一个时间点与其他所有时间点之间的 <strong>关联度（Attention Score）</strong>，自动为重要的数据片段分配更高的权重。</p>
+                <ul>
+                    <li><strong>机制原理</strong>：模型通过训练学习Query（查询）、Key（键）和Value（值）三个矩阵。对于当前的SOH预测任务，模型能自动检索历史数据中哪些片段（Key）与当前状态（Query）最匹配，并提取对应的信息（Value）。</li>
+                    <li><strong>去噪与聚焦</strong>：在充电初期和末期的某些关键电压拐点，往往包含更多关于SOH的信息。自注意力机制会给这些区域分配高权重，而忽略平滑段的冗余信息或噪声。</li>
+                </ul>
+
+                <p><strong>（2）多头机制</strong><br>
+                该模型采用了 <strong>多头结构（Multi-Head）</strong>，将特征空间映射到多个子空间同时观察。每个头独立进行注意力计算，最后利用Python将各头的计算结果拼接起来，形成对电池状态多方位的认知。这种机制增强了模型的非线性表达能力。</p>
+
+                <p><strong>（3）位置编码</strong><br>
+                自注意力机制是并行处理数据的，其本身不具备时序观念。作者引入了基于正弦和余弦函数的位置编码，给每个输入数据打上独特的时间标记，使模型既能高效并行计算，又能遵守时间序列的物理逻辑。</p>
+
+                <h3>3. 迁移策略</h3>
+                <p>当面对一个新的电池，且只有其前10% 的早期数据时，如何预测剩余90%的SOH？该论文采用了 <strong>基于参数冻结与微调的深度迁移学习</strong> 来解决这一问题。</p>
+                <ul>
+                    <li><strong>第一步：源域预训练（Pre-training）</strong> 利用一个数据量充足的源域电池训练模型，例如常温全生命周期数据的电池。在此阶段，模型学习到了锂电池老化的一般性规律，权重和偏置被充分优化，形成一个基础模型。</li>
+                    <li><strong>第二步：参数冻结（Freezing）</strong> 面对新电池任务时，作者保留了基础模型中大部分底层网络的参数。这些层负责提取通用的电池特征，将参数冻结，保持不变。这样做的好处在于节省了计算资源，又防止了在小样本数据上发生过拟合。</li>
+                    <li><strong>第三步：目标域微调（Fine-tuning）</strong> 微调的关键在于作者只解冻了模型的最后一层全连接层。利用新电池仅有的前10%数据，专门针对这一层进行反向传播训练。这层网络负责将提取到的特征映射到最终的SOH数值。由于只需要更新少量的参数，模型能够快速适应新电池的特性。</li>
+                </ul>
+
+                <div class="img-placeholder">
+                    [在此处插入 图3 图片]
+                    <div class="img-caption">图3 基于自注意力机制的模型结构</div>
+                </div>
+
+                <p><strong>为何优于域适应（Domain Adaptation）？</strong><br>
+                传统的域适应方法（如DAAD、DAAP）通过复杂的损失函数强行对齐源域和目标域的数据分布。但在电池SOH估计中，不同工况的数据分布差异巨大，强行对齐会导致精度下降。该论文的微调策略，不假设分布相似，而是通过调整高层决策参数来适应差异，展现出了该模型的鲁棒性。</p>
+            </section>
+
+            <section id="cn-sec3">
+                <h2>三、 实验验证</h2>
+                <p>为了验证SDTL方法的有效性，作者从材料（NCM vs NCA）、倍率（1C vs 2C）到温度（24℃ vs 4℃）三方面设置变量，设计了涵盖四种不同工况系列（Series1-4）的实验方案。</p>
+                
+                <h3>1. 精度提升</h3>
+                <p>在该研究采用的数据集中，SDTL方法的表现优于直接训练的Transformer和LSTM模型。</p>
+                <p><strong>NCM电池案例</strong>：相比于未微调的Transformer模型，SDTL实现了将均方根误差（RMSE）有效降低。</p>
+
+                <div class="img-placeholder">
+                    [在此处插入 图4 图片]
+                    <div class="img-caption">图4 三种方法在五次实验测试中的估计误差</div>
+                </div>
+
+                <p><strong>低温表现（4℃）</strong>：在低温环境中，电池电化学特性呈现显著的迟钝性与非线性特征。SDTL 方法在此工况下仍实现了较低的MAE 表现，验证了其在极端温度条件下的泛化适应力。</p>
+
+                <h3>2. 小样本学习表现</h3>
+                <p>实验严格限制目标域电池仅使用 <strong>前10%</strong> 的数据进行微调。结果显示，仅凭这些少量数据，模型就能预测后续漫长的老化轨迹，甚至判定电池何时达到寿命终止线。</p>
+
+                <div class="img-placeholder">
+                    [在此处插入 图5 图片]
+                    <div class="img-caption">图5 电池健康状态（SOH）估计结果</div>
+                </div>
+
+                <h3>3. 稳定性</h3>
+                <p>在与域对抗（DAAD）和域适应（DAAP）方法的对比中，SDTL展现出了更好的稳定性。DAAD和DAAP在不同实验轮次中的误差波动较大，而SDTL在多次重复实验中始终保持较低误差。特别是在数据分布差异较大的情况下，SDTL的RMSE比DAAD降低了更多。</p>
+
+                <div class="img-placeholder">
+                    [在此处插入 图6 图片]
+                    <div class="img-caption">图6 五种电池健康状态（SOH）估计方法的平均绝对误差（MAE）与均方根误差（RMSE）对比</div>
+                </div>
+            </section>
+
+            <section id="cn-sec4">
+                <h2>四、 总结</h2>
+                <p>该论文提出的SDTL电池 SOH 估计方法融合了自注意力机制与深度迁移学习，为工业界解决小样本工况下的状态评估提供了可行路径。</p>
+                <p>在架构设计上，该方法利用自注意力机制捕获电池衰减的非线性长程依赖，并通过仅解冻最后一层全连接层的微调策略，在保留浅层通用特征的同时实现了对特定工况的适配，有效平衡了计算效率与过拟合风险。</p>
+                <p>在数据层面，SDTL 降低了模型对海量目标域数据的依赖，适应了不同正极材料、环境温度及充放电协议下的领域分布差异。</p>
+                <p>实验证明，该方法在该论文使用的数据集上的性能优于传统深度学习模型，在小样本的条件下能进行有效SOH在线估计，具备良好的泛化能力。</p>
+            </section>
+
+            <section id="cn-ref">
+                <h2>原始文献</h2>
+                <p>X. Li, M. Zhao, S. Zhong, J. Li, Z. Cui, S. Fu, Z. Yan.<br>
+                Deep transfer learning enabled online state-of-health estimation of lithium-ion batteries under small samples across different cathode materials, ambient temperature and charge-discharge protocols[J].<br>
+                Journal of Power Sources, 2025, 650: 237503.</p>
+            </section>
+        </div>
+
+        <div id="content-en" class="content-section">
+            <h1 class="main-title">SDTL: A Self-Attention Based Deep Transfer Learning Method for Online SOH Estimation of Lithium-ion Batteries Under Small Samples</h1>
+            <a href="https://www.sciencedirect.com/science/article/pii/S0378775325013394" target="_blank" class="original-link">Original Link (ScienceDirect)</a>
+            <section>
+                <h2>Foreword</h2>
+                <p>With the rapid development of new energy vehicles and energy storage systems, lithium-ion batteries serve as core energy storage components. Their State of Health (SOH) monitoring is directly related to the safe operation and remaining useful life prediction of these systems. In real industrial scenarios, operating conditions are ever-changing, and battery materials are constantly iterating. For newly deployed batteries, we often face a serious problem: the lack of sufficient historical aging data to train high-precision models.</p>
+                <p>How can we achieve rapid and accurate online SOH estimation for new batteries across different materials, temperatures, and charge-discharge rates using limited early data?</p>
+                <p>The paper <em>"Deep transfer learning enabled online state-of-health estimation of lithium-ion batteries under small samples across different cathode materials, ambient temperature and charge-discharge protocols"</em>, published in <em>Journal of Power Sources</em> in 2025, proposes a <strong>Self-attention-based Deep Transfer Learning (SDTL)</strong> method. This method combines the core components of the Transformer architecture with fine-tuning strategies from transfer learning, reducing the reliance of high-precision SOH estimation on large-scale historical data.</p>
+                <div class="img-placeholder">[Image Placeholder: Figure 1 SDTL Framework]</div>
+            </section>
+            <section>
+                <h2>I. Pain Points of SOH Estimation</h2>
+                <p>In Battery Management System (BMS) research, SOH estimation requires:</p>
+                <ul>
+                    <li><strong>High Precision:</strong> The model must capture complex electrochemical nonlinear aging characteristics inside the battery.</li>
+                    <li><strong>Generalizability:</strong> The model must adapt to different cathode materials and variable operating conditions.</li>
+                    <li><strong>Low Data Dependency:</strong> The model must work when new batteries have only a small amount of cycle data.</li>
+                </ul>
+                <p>Meeting all three requirements simultaneously is a current dilemma. Traditional data-driven methods (like CNN, LSTM) require massive full-lifecycle data for training. Once the battery model changes or the operating environment shifts, the original model becomes inapplicable. To address this, the authors proposed the SDTL framework, with the core idea: <strong>Do not learn from scratch, but use existing historical data to quickly adapt to new tasks.</strong></p>
+            </section>
+            <section>
+                <h2>II. Construction of the SDTL Framework</h2>
+                <p>Targeting the characteristics of battery time-series data, the authors designed a complete SDTL framework including <strong>Multi-source Feature Engineering</strong>, <strong>Self-attention Feature Extraction</strong>, and <strong>Parameter Fine-tuning Transfer</strong>.</p>
+                <h3>1. Multi-source Feature Engineering</h3>
+                <p>The authors extracted 18 features (Health Indicators, HIs) from statistical, electrochemical, and temporal dimensions.</p>
+                <ul>
+                    <li><strong>Incremental Capacity Analysis (ICA):</strong> Extracts peaks of the IC curve, bridging physical models and data-driven models, closely related to active lithium loss.</li>
+                    <li><strong>Geometric Features:</strong> Includes constant current charge time, constant voltage charge capacity, etc. As aging occurs, polarization impedance increases, usually shortening the constant current charge phase.</li>
+                    <li><strong>High-order Statistics and Entropy:</strong> A highlight of the paper is the introduction of <strong>Sample Entropy</strong>. In early aging, mean and variance of voltage curves change little, but information entropy of voltage/current sequences changes significantly as SOH declines, capturing minute nonlinear signal fluctuations.</li>
+                </ul>
+                <div class="img-placeholder">[Image Placeholder: Table 1 HIs]</div>
+                <p>The authors used <strong>Pearson Correlation Coefficient (PCC)</strong> for feature selection. Results show HI5, HI17, and HI18 have high correlation with SOH. A sliding window technique is used to input these factors into the model.</p>
+                <div class="img-placeholder">[Image Placeholder: Figure 2 PCC Heatmap]</div>
+                <h3>2. Multi-Head Self-Attention Mechanism</h3>
+                <p>The paper introduces the core component of Transformer—<strong>Multi-Head Self-Attention</strong>—to improve feature extraction efficiency.</p>
+                <p><strong>(1) Self-Attention Mechanism</strong>: It calculates the <strong>Attention Score</strong> between every time point in a sequence, automatically assigning weights to important data segments.</p>
+                <p><strong>(2) Multi-Head Mechanism</strong>: Maps feature space to multiple subspaces to observe simultaneously, enhancing nonlinear expression.</p>
+                <p><strong>(3) Positional Encoding</strong>: Adds unique time markers to input data, allowing the model to compute in parallel while respecting time-series logic.</p>
+                <h3>3. Transfer Strategy</h3>
+                <p>How to predict the remaining 90% SOH with only the first 10% early data? The paper uses <strong>Deep Transfer Learning based on Freezing and Fine-tuning</strong>.</p>
+                <ul>
+                    <li><strong>Step 1: Pre-training:</strong> Train a base model on a source battery with ample data.</li>
+                    <li><strong>Step 2: Freezing:</strong> Freeze the underlying network layers that extract general features to save resources and prevent overfitting.</li>
+                    <li><strong>Step 3: Fine-tuning:</strong> Only unfreeze and train the final fully connected layer using the first 10% of the new battery data.</li>
+                </ul>
+                <div class="img-placeholder">[Image Placeholder: Figure 3 Model Structure]</div>
+                <p><strong>Why better than Domain Adaptation?</strong> Traditional methods (DAAD, DAAP) force distribution alignment. SDTL does not assume similar distributions but adjusts high-level decision parameters to adapt to differences, showing robustness.</p>
+            </section>
+            <section>
+                <h2>III. Experimental Verification</h2>
+                <h3>1. Accuracy Improvement</h3>
+                <p>SDTL outperformed direct Transformer and LSTM models in RMSE reduction for NCM batteries and maintained low MAE in low-temperature (4°C) environments.</p>
+                <div class="img-placeholder">[Image Placeholder: Figure 4 Errors]</div>
+                <h3>2. Small Sample Learning</h3>
+                <p>Using only the <strong>first 10%</strong> of data, the model successfully predicted long-term aging trajectories.</p>
+                <div class="img-placeholder">[Image Placeholder: Figure 5 SOH Results]</div>
+                <h3>3. Stability</h3>
+                <p>Compared to DAAD and DAAP, SDTL showed better stability across multiple experimental runs with lower error fluctuations.</p>
+                <div class="img-placeholder">[Image Placeholder: Figure 6 Comparison]</div>
+            </section>
+            <section>
+                <h2>IV. Conclusion</h2>
+                <p>The SDTL method fuses self-attention with deep transfer learning, providing a viable path for industrial SOH estimation under small samples. It captures nonlinear dependencies and adapts to specific conditions by fine-tuning only the last layer, balancing efficiency and accuracy.</p>
+            </section>
+            <section>
+                <h2>References</h2>
+                <p>X. Li, M. Zhao, S. Zhong, J. Li, Z. Cui, S. Fu, Z. Yan. Deep transfer learning enabled online state-of-health estimation of lithium-ion batteries under small samples across different cathode materials, ambient temperature and charge-discharge protocols[J]. Journal of Power Sources, 2025, 650: 237503.</p>
+            </section>
+        </div>
+
+        <div id="content-fr" class="content-section">
+            <h1 class="main-title">SDTL : Estimation en ligne du SOH des batteries Lithium-ion basée sur l'auto-attention et l'apprentissage par transfert profond</h1>
+            <a href="https://www.sciencedirect.com/science/article/pii/S0378775325013394" target="_blank" class="original-link">Lien Original (ScienceDirect)</a>
+            <section>
+                <h2>Avant-propos</h2>
+                <p>Avec le développement rapide des véhicules à énergie nouvelle, la surveillance précise de l'état de santé (SOH) des batteries lithium-ion est cruciale. Dans les scénarios industriels, nous manquons souvent de données historiques suffisantes pour les nouvelles batteries.</p>
+                <p>L'article publié dans <em>Journal of Power Sources</em> en 2025 propose une méthode <strong>SDTL (Self-attention-based Deep Transfer Learning)</strong>. Cette méthode combine l'architecture Transformer avec des stratégies de réglage fin (Fine-tuning) pour réduire la dépendance aux données massives.</p>
+                <div class="img-placeholder">[Image: Figure 1 Cadre SDTL]</div>
+            </section>
+            <section>
+                <h2>I. Les défis de l'estimation du SOH</h2>
+                <p>La recherche sur les BMS exige : <strong>Haute précision</strong>, <strong>Généralisabilité</strong>, et <strong>Faible dépendance aux données</strong>. La méthode SDTL propose de ne pas apprendre de zéro, mais d'utiliser les données historiques pour s'adapter rapidement aux nouvelles tâches.</p>
+            </section>
+            <section>
+                <h2>II. Construction du cadre SDTL</h2>
+                <p>L'auteur a conçu un cadre comprenant l'ingénierie des caractéristiques multi-sources, l'extraction de caractéristiques par auto-attention et le transfert par réglage fin.</p>
+                <h3>1. Ingénierie des caractéristiques</h3>
+                <p>18 indicateurs de santé (HIs) ont été extraits, incluant l'analyse de capacité incrémentale (ICA) et l'entropie de l'échantillon.</p>
+                <div class="img-placeholder">[Image: Tableau 1 HIs]</div>
+                <h3>2. Mécanisme d'auto-attention multi-têtes</h3>
+                <p>Ce mécanisme permet au modèle de peser automatiquement l'importance des segments de données historiques sans dépendre de l'ordre temporel strict, améliorant l'efficacité de l'extraction.</p>
+                <h3>3. Stratégie de transfert</h3>
+                <p>Utilisant le gel des paramètres et le réglage fin, le modèle utilise les 10% premières données d'une nouvelle batterie pour adapter la dernière couche du réseau, assurant une adaptation rapide.</p>
+                <div class="img-placeholder">[Image: Figure 3 Structure du modèle]</div>
+            </section>
+            <section>
+                <h2>III. Vérification expérimentale</h2>
+                <p>La méthode a prouvé sa supériorité en termes de précision (RMSE réduit) et de stabilité par rapport aux méthodes LSTM et Transformer classiques, même à basse température (4°C) et avec peu d'échantillons.</p>
+                <div class="img-placeholder">[Image: Figure 5 Résultats SOH]</div>
+            </section>
+            <section>
+                <h2>IV. Conclusion</h2>
+                <p>La méthode SDTL fusionne l'auto-attention et l'apprentissage par transfert, offrant une solution robuste pour l'estimation du SOH dans l'industrie avec des données limitées.</p>
+            </section>
+        </div>
+
+        <div id="content-de" class="content-section">
+            <h1 class="main-title">SDTL: Online-SOH-Schätzung von Lithium-Ionen-Batterien basierend auf Self-Attention und Deep Transfer Learning</h1>
+            <a href="https://www.sciencedirect.com/science/article/pii/S0378775325013394" target="_blank" class="original-link">Original-Link (ScienceDirect)</a>
+            <section>
+                <h2>Vorwort</h2>
+                <p>Mit der rasanten Entwicklung von Fahrzeugen mit neuer Energie ist die genaue Überwachung des Gesundheitszustands (SOH) von Lithium-Ionen-Batterien entscheidend. In industriellen Szenarien fehlt es oft an ausreichenden historischen Daten für neue Batterien.</p>
+                <p>Das 2025 im <em>Journal of Power Sources</em> veröffentlichte Papier schlägt eine <strong>SDTL-Methode (Self-attention-based Deep Transfer Learning)</strong> vor. Diese Methode kombiniert die Transformer-Architektur mit Fine-Tuning-Strategien, um die Abhängigkeit von massiven Daten zu verringern.</p>
+                <div class="img-placeholder">[Bild: Abbildung 1 SDTL-Rahmen]</div>
+            </section>
+            <section>
+                <h2>I. Herausforderungen der SOH-Schätzung</h2>
+                <p>Die BMS-Forschung erfordert: <strong>Hohe Präzision</strong>, <strong>Verallgemeinerbarkeit</strong> und <strong>Geringe Datenabhängigkeit</strong>. SDTL schlägt vor, nicht von Grund auf neu zu lernen, sondern vorhandene historische Daten zu nutzen, um sich schnell an neue Aufgaben anzupassen.</p>
+            </section>
+            <section>
+                <h2>II. Aufbau des SDTL-Rahmens</h2>
+                <p>Die Autoren entwarfen einen Rahmen, der Multi-Source-Feature-Engineering, Self-Attention-Feature-Extraktion und Parameter-Fine-Tuning umfasst.</p>
+                <h3>1. Feature-Engineering</h3>
+                <p>18 Gesundheitsindikatoren (HIs) wurden extrahiert, einschließlich inkrementeller Kapazitätsanalyse (ICA) und Probenentropie.</p>
+                <div class="img-placeholder">[Bild: Tabelle 1 HIs]</div>
+                <h3>2. Multi-Head Self-Attention Mechanismus</h3>
+                <p>Dieser Mechanismus ermöglicht es dem Modell, die Wichtigkeit historischer Datensegmente automatisch zu gewichten, was die Extraktionseffizienz verbessert.</p>
+                <h3>3. Transferstrategie</h3>
+                <p>Durch das Einfrieren von Parametern und Fine-Tuning nutzt das Modell die ersten 10% der Daten einer neuen Batterie, um die letzte Schicht des Netzwerks anzupassen.</p>
+                <div class="img-placeholder">[Bild: Abbildung 3 Modellstruktur]</div>
+            </section>
+            <section>
+                <h2>III. Experimentelle Überprüfung</h2>
+                <p>Die Methode erwies sich in Bezug auf Genauigkeit (reduzierter RMSE) und Stabilität als überlegen gegenüber klassischen LSTM- und Transformer-Methoden, selbst bei niedrigen Temperaturen (4°C) und kleinen Probenmengen.</p>
+                <div class="img-placeholder">[Bild: Abbildung 5 SOH-Ergebnisse]</div>
+            </section>
+            <section>
+                <h2>IV. Fazit</h2>
+                <p>Die SDTL-Methode verbindet Self-Attention mit Deep Transfer Learning und bietet einen robusten Weg für die industrielle SOH-Schätzung unter begrenzten Datenbedingungen.</p>
+            </section>
+        </div>
+
+    </main>
+
+    <script>
+        // 导航栏数据
+        const navData = {
+            cn: ["前言", "一、SOH估计的痛点", "二、SDTL框架的构造", "三、实验验证", "四、总结", "原始文献"],
+            en: ["Foreword", "I. Pain Points", "II. SDTL Framework", "III. Experiments", "IV. Conclusion", "References"],
+            fr: ["Avant-propos", "I. Défis SOH", "II. Cadre SDTL", "III. Expériences", "IV. Conclusion", "Références"],
+            de: ["Vorwort", "I. SOH Herausf.", "II. SDTL Rahmen", "III. Experimente", "IV. Fazit", "Referenzen"]
+        };
+
+        // 切换语言函数
+        function switchLang(lang) {
+            // 1. 切换内容显示
+            document.querySelectorAll('.content-section').forEach(el => {
+                el.classList.remove('active');
+            });
+            document.getElementById('content-' + lang).classList.add('active');
+
+            // 2. 更新按钮状态
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            // 简单匹配按钮文本来高亮 (实际开发可加ID)
+            const btns = document.querySelectorAll('.lang-btn');
+            if(lang === 'cn') btns[0].classList.add('active');
+            if(lang === 'en') btns[1].classList.add('active');
+            if(lang === 'fr') btns[2].classList.add('active');
+            if(lang === 'de') btns[3].classList.add('active');
+
+            // 3. 更新侧边导航
+            updateNav(lang);
+        }
+
+        // 更新导航链接
+        function updateNav(lang) {
+            const navList = document.getElementById('nav-list');
+            navList.innerHTML = '';
+            
+            // 这里为了简单，我们假设各语言版本的Section结构顺序一致
+            // 对应ID列表 (需要手动与HTML对应)
+            const sectionIds = {
+                cn: ['cn-intro', 'cn-sec1', 'cn-sec2', 'cn-sec3', 'cn-sec4', 'cn-ref'],
+                en: [], // 如果英文版也加了ID，可以在此扩展跳转
+                fr: [],
+                de: []
+            };
+
+            const items = navData[lang];
+            items.forEach((item, index) => {
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.innerText = item;
+                // 默认跳转到顶部，或者对应中文ID（因为单页切换，跳转定位比较复杂，这里做简单处理）
+                a.href = "#"; 
+                // 简单的点击滚动逻辑
+                a.onclick = function(e) {
+                    e.preventDefault();
+                    // 找到当前激活语言下的第index个section (h2)
+                    const activeContent = document.querySelector('.content-section.active');
+                    const headers = activeContent.querySelectorAll('h2');
+                    if(headers[index]) {
+                        headers[index].scrollIntoView({behavior: "smooth"});
+                    }
+                };
+                li.appendChild(a);
+                navList.appendChild(li);
+            });
+        }
+
+        // 初始化
+        updateNav('cn');
+    </script>
+</body>
+</html>
